@@ -1,4 +1,4 @@
-// ─── Client-side Router ─────────────────────────────────────────────
+// Client-side router
 class Router {
   constructor() {
     this.routes = {};
@@ -12,7 +12,8 @@ class Router {
   }
 
   navigate(path) {
-    if (window.location.pathname === path) return;
+    const currentPath = `${window.location.pathname}${window.location.search}`;
+    if (currentPath === path) return;
     window.history.pushState({}, '', path);
     this.resolve();
   }
@@ -20,36 +21,47 @@ class Router {
   resolve() {
     const path = window.location.pathname;
 
-    // Exact match
     if (this.routes[path]) {
       this.currentPage = path;
       this.routes[path]();
       return;
     }
 
-    // Dynamic match (e.g., /product/:id)
     for (const route of Object.keys(this.routes)) {
-      const regex = new RegExp('^' + route.replace(/:([^/]+)/g, '([^/]+)') + '$');
+      const regex = new RegExp(`^${route.replace(/:([^/]+)/g, '([^/]+)')}$`);
       const match = path.match(regex);
       if (match) {
         this.currentPage = route;
-        this.routes[route](...match.slice(1));
+        this.routes[route](...match.slice(1).map(decodeURIComponent));
         return;
       }
     }
 
-    // 404 → redirect to home
     this.navigate('/');
   }
 }
 
 export const router = new Router();
 
-// Intercept link clicks for SPA navigation
-document.addEventListener('click', (e) => {
-  const link = e.target.closest('a[data-link]');
-  if (link) {
-    e.preventDefault();
-    router.navigate(link.getAttribute('href'));
+document.addEventListener('click', (event) => {
+  const link = event.target.closest('a[data-link]');
+  if (!link) return;
+
+  if (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    link.target === '_blank' ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  ) {
+    return;
   }
+
+  const href = link.getAttribute('href');
+  if (!href || href.startsWith('http')) return;
+
+  event.preventDefault();
+  router.navigate(href);
 });

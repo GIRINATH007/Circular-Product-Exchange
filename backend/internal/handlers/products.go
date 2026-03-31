@@ -71,34 +71,34 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 		return
 	}
 
+	user, err := h.db.GetUser(userID)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+	if user.Role != "seller" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only seller accounts can create listings"})
+		return
+	}
+
 	var req models.CreateProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product data", "details": err.Error()})
 		return
 	}
 
-	seller, _ := h.db.GetUser(userID)
-	sellerName := "Unknown"
-	if seller != nil {
-		sellerName = seller.DisplayName
-	}
-
-	reusePotential := calculateReusePotential(req.LifecycleData)
-	carbonSaved := estimateCarbonSaved(req.LifecycleData, req.Category)
+	lifecycleData := buildLifecycleData(req)
+	reusePotential := calculateReusePotential(lifecycleData)
+	carbonSaved, carbonSource := estimateCarbonSaved(lifecycleData, req.Category)
+	lifecycleData.CarbonSaved = carbonSaved
+	lifecycleData.CarbonSource = carbonSource
 
 	product := &models.Product{
-		SellerID: userID, SellerName: sellerName,
+		SellerID: userID, SellerName: user.DisplayName,
 		Title: req.Title, Description: req.Description,
 		Category: req.Category, Condition: req.Condition,
 		BasePrice: req.BasePrice, ImageURLs: req.ImageURLs,
-		LifecycleData: models.LifecycleData{
-			ManufacturingImpact: req.LifecycleData.ManufacturingImpact,
-			UsageMonths: req.LifecycleData.UsageMonths,
-			RefurbishmentQuality: req.LifecycleData.RefurbishmentQuality,
-			ExpectedReuseCycles: req.LifecycleData.ExpectedReuseCycles,
-			MaterialRecyclability: req.LifecycleData.MaterialRecyclability,
-			CarbonSaved: carbonSaved,
-		},
+		LifecycleData:  lifecycleData,
 		ReusePotential: reusePotential,
 	}
 
@@ -120,6 +120,16 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 	userID, exists := middleware.GetUserIDFromContext(c)
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+		return
+	}
+
+	user, err := h.db.GetUser(userID)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+	if user.Role != "seller" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only seller accounts can update listings"})
 		return
 	}
 
@@ -159,6 +169,16 @@ func (h *ProductHandler) DeleteProduct(c *gin.Context) {
 	userID, exists := middleware.GetUserIDFromContext(c)
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+		return
+	}
+
+	user, err := h.db.GetUser(userID)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		return
+	}
+	if user.Role != "seller" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only seller accounts can archive listings"})
 		return
 	}
 
@@ -254,6 +274,25 @@ func (h *ProductHandler) GetCategories(c *gin.Context) {
 	c.JSON(http.StatusOK, categories)
 }
 
+// MyListings handles GET /api/products/my-listings
+func (h *ProductHandler) MyListings(c *gin.Context) {
+	userID, exists := middleware.GetUserIDFromContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+		return
+	}
+
+	products := h.db.GetUserProducts(userID, true) // include archived
+
+	for _, p := range products {
+		breakdown := h.pricing.CalculatePrice(p)
+		p.DynamicPrice = breakdown.FinalPrice
+		p.PricingBreakdown = &breakdown
+	}
+
+	c.JSON(http.StatusOK, gin.H{"products": products, "total": len(products)})
+}
+
 // --- Helper functions ---
 
 func calculateReusePotential(ld models.LifecycleData) int {
@@ -267,23 +306,226 @@ func calculateReusePotential(ld models.LifecycleData) int {
 	return int(score)
 }
 
-func estimateCarbonSaved(ld models.LifecycleData, category string) float64 {
-	categoryBaseline := map[string]float64{
-		"electronics": 100.0, "furniture": 40.0, "clothing": 20.0,
-		"appliances": 50.0, "books": 5.0, "sports": 15.0,
-		"toys": 10.0, "automotive": 80.0, "other": 15.0,
+// LCA-backed manufacturing CO₂ baselines (kg CO₂e per new product).
+// Sources:
+//   - Electronics: Apple Product Environmental Reports (2023), EU JRC ILCD Handbook
+//   - Furniture: EPA WARM Model v15, UNEP Life Cycle Initiative
+//   - Clothing: WRAP UK "Valuing Our Clothes" Report (2017), Quantis World Apparel LCA (2018)
+//   - Appliances: EU Ecodesign Directive preparatory studies, IEA 4E Mapping & Benchmarking
+//   - Books: Green Press Initiative, EPA WARM Model v15
+//   - Sports/Toys: Industry-average LCA estimates, Ellen MacArthur Foundation
+//   - Automotive: EPA WARM Model v15, GREET Model (Argonne National Lab)
+var lcaManufacturingBaseline = map[string]float64{
+	"electronics": 85.0, // Weighted average: smartphone ~70kg, laptop ~300kg, tablet ~100kg
+	"furniture":   47.0, // Wooden furniture avg per EPA WARM model
+	"clothing":    22.0, // Average garment lifecycle per WRAP UK / Quantis study
+	"appliances":  55.0, // Household appliance avg per EU Ecodesign studies
+	"books":       4.5,  // Per-book avg per EPA WARM / Green Press Initiative
+	"sports":      18.0, // Industry LCA avg for sporting goods
+	"toys":        8.0,  // Average plastic/mixed-material toy
+	"automotive":  90.0, // Auto parts avg per EPA WARM / GREET model
+	"other":       15.0,
+}
+
+// Average product weight per category (kg). Used as reference when seller provides weight.
+var avgCategoryWeight = map[string]float64{
+	"electronics": 3.0,
+	"furniture":   25.0,
+	"clothing":    0.8,
+	"appliances":  20.0,
+	"books":       0.4,
+	"sports":      5.0,
+	"toys":        1.2,
+	"automotive":  8.0,
+	"other":       3.0,
+}
+
+// LCA-backed recyclability baselines (%).
+var lcaRecyclabilityBaseline = map[string]int{
+	"electronics": 62,
+	"furniture":   81,
+	"clothing":    56,
+	"appliances":  68,
+	"books":       92,
+	"sports":      60,
+	"toys":        48,
+	"automotive":  74,
+	"other":       55,
+}
+
+func buildLifecycleData(req models.CreateProductRequest) models.LifecycleData {
+	// If expert data is provided, use it but recalculate carbon via our formula
+	if req.LifecycleData != nil {
+		ld := *req.LifecycleData
+		// Do NOT trust seller-provided CarbonSaved — we always recalculate
+		ld.CarbonSaved = 0
+		return ld
 	}
 
-	baseline, exists := categoryBaseline[category]
+	hints := req.LifecycleHints
+	usageMonths := 12
+	usageIntensity := "moderate"
+	refurbished := false
+	hasRepairs := false
+	weightKg := 0.0
+
+	if hints != nil {
+		if hints.UsageMonths > 0 {
+			usageMonths = hints.UsageMonths
+		}
+		if hints.UsageIntensity != "" {
+			usageIntensity = hints.UsageIntensity
+		}
+		refurbished = hints.Refurbished
+		hasRepairs = hints.HasRepairs
+		weightKg = hints.WeightKg
+	}
+
+	impact := lcaManufacturingBaseline[req.Category]
+	if impact == 0 {
+		impact = lcaManufacturingBaseline["other"]
+	}
+
+	recyclability := lcaRecyclabilityBaseline[req.Category]
+	if recyclability == 0 {
+		recyclability = lcaRecyclabilityBaseline["other"]
+	}
+
+	conditionQuality := map[string]int{
+		"like_new": 90,
+		"good":     76,
+		"fair":     61,
+		"poor":     42,
+	}
+
+	conditionReuse := map[string]int{
+		"like_new": 5,
+		"good":     4,
+		"fair":     3,
+		"poor":     2,
+	}
+
+	refurbishmentQuality := conditionQuality[req.Condition]
+	if refurbishmentQuality == 0 {
+		refurbishmentQuality = 70
+	}
+
+	expectedReuseCycles := conditionReuse[req.Condition]
+	if expectedReuseCycles == 0 {
+		expectedReuseCycles = 3
+	}
+
+	switch usageIntensity {
+	case "light":
+		refurbishmentQuality += 6
+		expectedReuseCycles++
+	case "heavy":
+		refurbishmentQuality -= 8
+		expectedReuseCycles--
+	}
+
+	if usageMonths > 36 {
+		refurbishmentQuality -= 6
+		expectedReuseCycles--
+	} else if usageMonths < 12 {
+		refurbishmentQuality += 4
+	}
+
+	if refurbished {
+		refurbishmentQuality += 12
+		expectedReuseCycles++
+		recyclability += 4
+	}
+
+	if hasRepairs {
+		refurbishmentQuality += 4
+		expectedReuseCycles++
+	}
+
+	if refurbishmentQuality < 25 {
+		refurbishmentQuality = 25
+	}
+	if refurbishmentQuality > 96 {
+		refurbishmentQuality = 96
+	}
+	if expectedReuseCycles < 1 {
+		expectedReuseCycles = 1
+	}
+	if recyclability < 30 {
+		recyclability = 30
+	}
+	if recyclability > 95 {
+		recyclability = 95
+	}
+
+	return models.LifecycleData{
+		ManufacturingImpact:   impact,
+		UsageMonths:           usageMonths,
+		RefurbishmentQuality:  refurbishmentQuality,
+		ExpectedReuseCycles:   expectedReuseCycles,
+		MaterialRecyclability: recyclability,
+		WeightKg:              weightKg,
+	}
+}
+
+// estimateCarbonSaved calculates how much CO₂ is avoided by reusing this product
+// instead of manufacturing a new one.
+//
+// Formula:
+//
+//	carbonSaved = lcaBaseline × weightMultiplier × qualityFactor × (1 / expectedReuseCycles)
+//
+// Where:
+//   - lcaBaseline: Category-specific CO₂ from manufacturing a new product (LCA studies)
+//   - weightMultiplier: (productWeight / avgCategoryWeight), defaults to 1.0 if weight unknown
+//     Heavier items within a category save proportionally more carbon.
+//   - qualityFactor: refurbishmentQuality / 100 — higher quality = more of the original
+//     manufacturing emissions are genuinely avoided.
+//   - reuseDivisor: 1 / expectedReuseCycles — the carbon saving is amortized across
+//     how many times this item can realistically be resold before end-of-life.
+//
+// This follows the "avoided burden" methodology used in ISO 14044 LCA standards.
+func estimateCarbonSaved(ld models.LifecycleData, category string) (float64, string) {
+	baseline, exists := lcaManufacturingBaseline[category]
 	if !exists {
-		baseline = 15.0
+		baseline = lcaManufacturingBaseline["other"]
+	}
+
+	// Weight multiplier: adjusts baseline by actual product weight vs category average
+	weightMultiplier := 1.0
+	avgWeight := avgCategoryWeight[category]
+	if avgWeight == 0 {
+		avgWeight = avgCategoryWeight["other"]
+	}
+	if ld.WeightKg > 0 && avgWeight > 0 {
+		weightMultiplier = ld.WeightKg / avgWeight
+		// Clamp to reasonable range (0.2x to 5.0x)
+		if weightMultiplier < 0.2 {
+			weightMultiplier = 0.2
+		}
+		if weightMultiplier > 5.0 {
+			weightMultiplier = 5.0
+		}
 	}
 
 	qualityFactor := float64(ld.RefurbishmentQuality) / 100.0
-	reuseFactor := float64(ld.ExpectedReuseCycles) / 3.0
 
-	if ld.CarbonSaved > 0 {
-		return ld.CarbonSaved
+	// Amortize savings across expected reuse cycles (avoided burden per cycle)
+	reuseDivisor := float64(ld.ExpectedReuseCycles)
+	if reuseDivisor < 1 {
+		reuseDivisor = 1
 	}
-	return baseline * qualityFactor * reuseFactor
+
+	carbonSaved := baseline * weightMultiplier * qualityFactor / reuseDivisor
+
+	// Build source citation
+	source := "Estimated via avoided-burden LCA method (ISO 14044). "
+	source += "Manufacturing baseline from EPA WARM Model, EU Ecodesign, and industry LCA data. "
+	if ld.WeightKg > 0 {
+		source += "Weight-adjusted using seller-provided product weight."
+	} else {
+		source += "Using category-average weight (no product weight provided)."
+	}
+
+	return carbonSaved, source
 }

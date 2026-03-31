@@ -30,3 +30,6 @@ frontend/dist/
 
 # Temp
 /tmp/
+
+# Go build cache
+backend/.gocache/

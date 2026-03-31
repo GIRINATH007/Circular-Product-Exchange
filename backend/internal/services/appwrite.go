@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -330,6 +331,47 @@ func (s *AppwriteService) GetAllUsers() []*models.User {
 
 // ─── Product Operations ──────────────────────────────────────────────────────
 
+// GetUserProducts returns all products owned by a specific user.
+// If includeArchived is true, also returns products with status "archived".
+func (s *AppwriteService) GetUserProducts(userID string, includeArchived bool) []*models.Product {
+	if s.useCloud {
+		queries := []string{
+			query.Equal("sellerId", userID),
+			query.Limit(200),
+		}
+		docs, err := s.db.ListDocuments(s.cfg.AppwriteDatabaseID, s.cfg.ProductsCollectionID,
+			s.db.WithListDocumentsQueries(queries),
+		)
+		if err != nil {
+			return []*models.Product{}
+		}
+		allData := decodeDocList(docs)
+		products := make([]*models.Product, 0, len(allData))
+		for i, data := range allData {
+			p := docToProduct(docs.Documents[i].Id, data, docs.Documents[i].CreatedAt)
+			if !includeArchived && p.Status == "archived" {
+				continue
+			}
+			products = append(products, p)
+		}
+		return products
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var results []*models.Product
+	for _, p := range s.products {
+		if p.SellerID != userID {
+			continue
+		}
+		if !includeArchived && p.Status == "archived" {
+			continue
+		}
+		results = append(results, p)
+	}
+	return results
+}
+
 func (s *AppwriteService) CreateProduct(product *models.Product) (*models.Product, error) {
 	product.ID = uuid.New().String()
 	product.Status = "active"
@@ -391,16 +433,7 @@ func (s *AppwriteService) ListProducts(filter models.ProductFilter) ([]*models.P
 		if filter.Condition != "" {
 			queries = append(queries, query.Equal("condition", filter.Condition))
 		}
-		limit := filter.Limit
-		if limit < 1 || limit > 50 {
-			limit = 12
-		}
-		page := filter.Page
-		if page < 1 {
-			page = 1
-		}
-		queries = append(queries, query.Limit(limit))
-		queries = append(queries, query.Offset((page-1)*limit))
+		queries = append(queries, query.Limit(200))
 
 		docs, err := s.db.ListDocuments(s.cfg.AppwriteDatabaseID, s.cfg.ProductsCollectionID,
 			s.db.WithListDocumentsQueries(queries),
@@ -413,7 +446,9 @@ func (s *AppwriteService) ListProducts(filter models.ProductFilter) ([]*models.P
 		for i, data := range allData {
 			products = append(products, docToProduct(docs.Documents[i].Id, data, docs.Documents[i].CreatedAt))
 		}
-		return products, docs.Total
+		filtered := filterProducts(products, filter)
+		total := len(filtered)
+		return paginateProducts(filtered, filter), total
 	}
 
 	// In-memory
@@ -424,44 +459,11 @@ func (s *AppwriteService) ListProducts(filter models.ProductFilter) ([]*models.P
 		if p.Status != "active" {
 			continue
 		}
-		if filter.Category != "" && p.Category != filter.Category {
-			continue
-		}
-		if filter.Condition != "" && p.Condition != filter.Condition {
-			continue
-		}
-		if filter.MinPrice > 0 && p.DynamicPrice < filter.MinPrice {
-			continue
-		}
-		if filter.MaxPrice > 0 && p.DynamicPrice > filter.MaxPrice {
-			continue
-		}
-		if filter.SearchQuery != "" {
-			q := filter.SearchQuery
-			if !containsIgnoreCase(p.Title, q) && !containsIgnoreCase(p.Description, q) {
-				continue
-			}
-		}
 		results = append(results, p)
 	}
-	total := len(results)
-	page := filter.Page
-	if page < 1 {
-		page = 1
-	}
-	limit := filter.Limit
-	if limit < 1 || limit > 50 {
-		limit = 12
-	}
-	start := (page - 1) * limit
-	if start >= len(results) {
-		return []*models.Product{}, total
-	}
-	end := start + limit
-	if end > len(results) {
-		end = len(results)
-	}
-	return results[start:end], total
+	filtered := filterProducts(results, filter)
+	total := len(filtered)
+	return paginateProducts(filtered, filter), total
 }
 
 func (s *AppwriteService) UpdateProduct(productID string, updates models.UpdateProductRequest) (*models.Product, error) {
@@ -790,13 +792,83 @@ func containsIgnoreCase(s, substr string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
 
+func filterProducts(products []*models.Product, filter models.ProductFilter) []*models.Product {
+	results := make([]*models.Product, 0, len(products))
+	for _, p := range products {
+		if filter.Category != "" && p.Category != filter.Category {
+			continue
+		}
+		if filter.Condition != "" && p.Condition != filter.Condition {
+			continue
+		}
+		price := p.DynamicPrice
+		if price <= 0 {
+			price = p.BasePrice
+		}
+		if filter.MinPrice > 0 && price < filter.MinPrice {
+			continue
+		}
+		if filter.MaxPrice > 0 && price > filter.MaxPrice {
+			continue
+		}
+		if filter.SearchQuery != "" && !containsIgnoreCase(p.Title, filter.SearchQuery) && !containsIgnoreCase(p.Description, filter.SearchQuery) {
+			continue
+		}
+		results = append(results, p)
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		leftPrice := results[i].DynamicPrice
+		if leftPrice <= 0 {
+			leftPrice = results[i].BasePrice
+		}
+		rightPrice := results[j].DynamicPrice
+		if rightPrice <= 0 {
+			rightPrice = results[j].BasePrice
+		}
+
+		switch filter.SortBy {
+		case "price_asc":
+			return leftPrice < rightPrice
+		case "price_desc":
+			return leftPrice > rightPrice
+		case "sustainability":
+			return results[i].ReusePotential > results[j].ReusePotential
+		default:
+			return results[i].CreatedAt.After(results[j].CreatedAt)
+		}
+	})
+
+	return results
+}
+
+func paginateProducts(products []*models.Product, filter models.ProductFilter) []*models.Product {
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	limit := filter.Limit
+	if limit < 1 || limit > 50 {
+		limit = 12
+	}
+	start := (page - 1) * limit
+	if start >= len(products) {
+		return []*models.Product{}
+	}
+	end := start + limit
+	if end > len(products) {
+		end = len(products)
+	}
+	return products[start:end]
+}
+
 // ─── Demo Data Seeding (in-memory only) ──────────────────────────────────────
 
 func (s *AppwriteService) seedDemoData() {
 	demoUsers := []struct{ email, password, name, role string }{
 		{"alice@example.com", "password123", "Alice Green", "seller"},
 		{"bob@example.com", "password123", "Bob Reuser", "buyer"},
-		{"carol@example.com", "password123", "Carol Recycle", "recycler"},
+		{"carol@example.com", "password123", "Carol Recycle", "seller"},
 		{"dave@example.com", "password123", "Dave Sustain", "seller"},
 		{"emma@example.com", "password123", "Emma Eco", "buyer"},
 	}

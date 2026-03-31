@@ -1,10 +1,25 @@
-// ─── Leaderboard Page ───────────────────────────────────────────────
 import { api } from '../api.js';
-import { loadingHTML, emptyHTML } from '../utils.js';
+import { emptyHTML, formatWholeNumber, renderSectionIntro } from '../utils.js';
 
 export async function renderLeaderboardPage() {
   const app = document.getElementById('page-content');
-  app.innerHTML = `<div class="container page">${loadingHTML('Loading leaderboard...')}</div>`;
+  app.innerHTML = `
+    <div class="container page stack-lg">
+      <section class="section-shell">
+        ${renderSectionIntro(
+          'Community',
+          'Recognition for the people moving products into their next life',
+          'Leaderboard rankings and badge definitions help make the gamification layer feel accountable, aspirational, and useful.'
+        )}
+        <div class="tabs" id="community-tabs">
+          <button type="button" class="tab active" data-tab="rankings">Rankings</button>
+          <button type="button" class="tab" data-tab="badges">Badge Library</button>
+        </div>
+      </section>
+
+      <section id="community-content" class="stack-lg"></section>
+    </div>
+  `;
 
   try {
     const [leaderboard, badges] = await Promise.all([
@@ -12,90 +27,108 @@ export async function renderLeaderboardPage() {
       api.getBadges(),
     ]);
 
-    app.innerHTML = `
-      <div class="container page">
-        <div class="tabs mb-3" id="lb-tabs">
-          <button class="tab active" data-tab="rankings">🏆 Rankings</button>
-          <button class="tab" data-tab="badges">🎖️ All Badges</button>
-        </div>
+    const content = document.getElementById('community-content');
+    const tabs = document.querySelectorAll('#community-tabs .tab');
 
-        <div id="rankings-section">
-          ${renderRankings(leaderboard)}
-        </div>
+    function renderView(tabId) {
+      content.innerHTML = tabId === 'badges'
+        ? renderBadges(badges)
+        : renderRankings(leaderboard);
+    }
 
-        <div id="badges-section" class="hidden">
-          ${renderBadgesGrid(badges)}
-        </div>
-      </div>
-    `;
-
-    // Tab switching
-    document.querySelectorAll('#lb-tabs .tab').forEach(tab => {
+    tabs.forEach((tab) => {
       tab.addEventListener('click', () => {
-        document.querySelectorAll('#lb-tabs .tab').forEach(t => t.classList.remove('active'));
+        tabs.forEach((item) => item.classList.remove('active'));
         tab.classList.add('active');
-        const target = tab.dataset.tab;
-        document.getElementById('rankings-section').classList.toggle('hidden', target !== 'rankings');
-        document.getElementById('badges-section').classList.toggle('hidden', target !== 'badges');
+        renderView(tab.dataset.tab);
       });
     });
-  } catch (err) {
-    app.innerHTML = `<div class="container page">${emptyHTML('⚠️', 'Error', err.message)}</div>`;
+
+    renderView('rankings');
+  } catch (error) {
+    document.getElementById('community-content').innerHTML = emptyHTML(
+      'Community data unavailable',
+      error.message || 'We could not load rankings or badges right now.'
+    );
   }
 }
 
-function renderRankings(leaderboard) {
-  if (!leaderboard || leaderboard.length === 0) {
-    return emptyHTML('🏆', 'No rankings yet', 'Be the first to earn sustainability points!');
+function renderRankings(entries) {
+  if (!entries?.length) {
+    return emptyHTML('No rankings yet', 'The leaderboard will populate as members complete sustainable exchanges.');
   }
 
   return `
-    <div class="card" style="overflow:hidden">
-      <div style="padding:20px 24px;border-bottom:1px solid var(--border)">
-        <h3>🏆 Sustainability Leaderboard</h3>
+    <section class="section-shell">
+      ${renderSectionIntro(
+        'Rankings',
+        'Top contributors by sustainability score',
+        'Scores are shaped by verified exchange activity and lifecycle impact, not simple account age.'
+      )}
+      <div class="leaderboard-table">
+        ${entries.map((entry, index) => `
+          <article class="leaderboard-row">
+            <div class="leaderboard-rank ${rankClass(index)}">${index + 1}</div>
+            <div class="dashboard-avatar" style="width:52px;height:52px;font-size:1.05rem">${initials(entry.displayName)}</div>
+            <div class="stack-md" style="gap:0.35rem">
+              <h3>${entry.displayName}</h3>
+              <p>${formatWholeNumber(entry.totalCarbonSaved || 0)} kg CO2e saved | ${entry.badgeCount || 0} badges</p>
+            </div>
+            <strong>${entry.sustainabilityScore || 0} pts</strong>
+          </article>
+        `).join('')}
       </div>
-      ${leaderboard.map((entry, i) => {
-        const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : 'normal';
-        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
-        const initials = (entry.displayName || 'U').charAt(0).toUpperCase();
-        return `
-          <div class="leaderboard-row">
-            <div class="leaderboard-rank ${rankClass}">${medal || entry.rank}</div>
-            <div class="dashboard-avatar" style="width:40px;height:40px;font-size:1rem">${initials}</div>
-            <div style="flex:1">
-              <div style="font-weight:600">${entry.displayName}</div>
-              <div class="text-muted" style="font-size:0.8rem">🏆 ${entry.badgeCount || 0} badges · 🌱 ${(entry.totalCarbonSaved || 0).toFixed(1)} kg CO₂</div>
-            </div>
-            <div style="text-align:right">
-              <div class="text-accent" style="font-weight:700">${entry.sustainabilityScore} pts</div>
-            </div>
-          </div>
-        `;
-      }).join('')}
-    </div>
+    </section>
   `;
 }
 
-function renderBadgesGrid(badges) {
-  if (!badges || badges.length === 0) {
-    return emptyHTML('🎖️', 'No badges defined', 'Badges are coming soon!');
+function renderBadges(badges) {
+  if (!badges?.length) {
+    return emptyHTML('No badges found', 'Badge definitions are not available right now.');
   }
 
-  const tierColors = {
-    bronze: 'amber', silver: 'blue', gold: 'green', platinum: 'purple'
-  };
-
   return `
-    <div class="section-header"><h2>🎖️ All Available Badges</h2></div>
-    <div class="grid-3">
-      ${badges.map(b => `
-        <div class="card" style="padding:24px;text-align:center">
-          <div style="font-size:3rem;margin-bottom:12px">${b.icon}</div>
-          <h3 style="margin-bottom:4px">${b.name}</h3>
-          <span class="tag tag-${tierColors[b.tier] || 'blue'}" style="margin-bottom:8px">${b.tier}</span>
-          <p class="text-secondary" style="font-size:0.85rem;margin-top:8px">${b.description}</p>
-        </div>
-      `).join('')}
-    </div>
+    <section class="section-shell">
+      ${renderSectionIntro(
+        'Badge Library',
+        'Milestones that reinforce circular behavior',
+        'Each badge describes a threshold the platform can use to encourage repeat contribution and higher-impact exchange activity.'
+      )}
+      <div class="grid-3">
+        ${badges.map((badge) => `
+          <article class="panel-card">
+            <div class="stack-md">
+              <span class="pill pill-${tierTone(badge.tier)}">${badge.tier}</span>
+              <h3>${badge.name}</h3>
+              <p>${badge.description}</p>
+              <p class="subtle">${badge.criteria}</p>
+            </div>
+          </article>
+        `).join('')}
+      </div>
+    </section>
   `;
+}
+
+function rankClass(index) {
+  if (index === 0) return 'gold';
+  if (index === 1) return 'silver';
+  if (index === 2) return 'bronze';
+  return '';
+}
+
+function initials(name = 'User') {
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function tierTone(tier = '') {
+  if (tier === 'gold' || tier === 'platinum') return 'gold';
+  if (tier === 'silver') return 'sky';
+  if (tier === 'bronze') return 'amber';
+  return 'muted';
 }

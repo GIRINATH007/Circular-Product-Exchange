@@ -1,156 +1,140 @@
-// ─── Analytics Dashboard Page ───────────────────────────────────────
 import { api } from '../api.js';
-import { formatNumber, formatPrice, loadingHTML, emptyHTML } from '../utils.js';
+import {
+  emptyHTML,
+  formatNumber,
+  formatWholeNumber,
+  progressBarHTML,
+  renderMetricCard,
+  renderSectionIntro,
+} from '../utils.js';
 
 export async function renderAnalyticsPage() {
   const app = document.getElementById('page-content');
-  app.innerHTML = `<div class="container page">${loadingHTML('Loading analytics...')}</div>`;
+  app.innerHTML = `
+    <div class="container page stack-lg">
+      <section class="section-shell">
+        ${renderSectionIntro(
+          'Impact Analytics',
+          'Track the environmental effect of circular exchange',
+          'Platform-wide and personal dashboards surface carbon savings, waste reduction, activity patterns, and category-level contribution.'
+        )}
+        <div class="tabs" id="analytics-tabs"></div>
+      </section>
+
+      <section id="analytics-content" class="analytics-layout"></section>
+    </div>
+  `;
 
   try {
-    const globalRes = await api.getGlobalAnalytics();
-    const global = globalRes.analytics || globalRes;
-    let personal = null;
-    if (api.isLoggedIn()) {
-      try {
-        const pRes = await api.getPersonalAnalytics();
-        personal = pRes.analytics || pRes;
-      } catch {}
+    const [globalResponse, personalResponse] = await Promise.all([
+      api.getGlobalAnalytics(),
+      api.isLoggedIn() ? api.getPersonalAnalytics().catch(() => null) : Promise.resolve(null),
+    ]);
+
+    const global = globalResponse.analytics || globalResponse;
+    const personal = personalResponse?.analytics || personalResponse || null;
+    const impactSummary = globalResponse.impactSummary || {};
+
+    const tabs = document.getElementById('analytics-tabs');
+    const content = document.getElementById('analytics-content');
+    const availableTabs = personal
+      ? [
+          { id: 'personal', label: 'My Impact' },
+          { id: 'global', label: 'Platform Impact' },
+        ]
+      : [{ id: 'global', label: 'Platform Impact' }];
+
+    tabs.innerHTML = availableTabs.map((tab, index) => `
+      <button type="button" class="tab ${index === 0 ? 'active' : ''}" data-tab="${tab.id}">${tab.label}</button>
+    `).join('');
+
+    function renderTab(tabId) {
+      if (tabId === 'personal' && personal) {
+        content.innerHTML = renderPersonalAnalytics(personal);
+      } else {
+        content.innerHTML = renderGlobalAnalytics(global, impactSummary);
+      }
     }
 
-    app.innerHTML = `
-      <div class="container page">
-        <div class="section-header"><h2>📊 Analytics Dashboard</h2></div>
-
-        ${personal ? `
-          <div class="tabs mb-3" id="analytics-tabs">
-            <button class="tab active" data-tab="personal">My Impact</button>
-            <button class="tab" data-tab="global">Global Impact</button>
-          </div>
-        ` : ''}
-
-        <div id="personal-section" class="${personal ? '' : 'hidden'}">
-          ${personal ? renderPersonalAnalytics(personal) : ''}
-        </div>
-
-        <div id="global-section" class="${personal ? 'hidden' : ''}">
-          ${renderGlobalAnalytics(global)}
-        </div>
-      </div>
-    `;
-
-    // Tab switching
-    if (personal) {
-      document.querySelectorAll('.tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-          tab.classList.add('active');
-          const target = tab.dataset.tab;
-          document.getElementById('personal-section').classList.toggle('hidden', target !== 'personal');
-          document.getElementById('global-section').classList.toggle('hidden', target !== 'global');
-        });
+    tabs.querySelectorAll('.tab').forEach((button) => {
+      button.addEventListener('click', () => {
+        tabs.querySelectorAll('.tab').forEach((tab) => tab.classList.remove('active'));
+        button.classList.add('active');
+        renderTab(button.dataset.tab);
       });
-    }
-  } catch (err) {
-    app.innerHTML = `<div class="container page">${emptyHTML('⚠️', 'Error', err.message)}</div>`;
+    });
+
+    renderTab(availableTabs[0].id);
+  } catch (error) {
+    document.getElementById('analytics-content').innerHTML = emptyHTML(
+      'Analytics unavailable',
+      error.message || 'Analytics data could not be loaded.'
+    );
   }
 }
 
-function renderGlobalAnalytics(g) {
+function renderGlobalAnalytics(data, impactSummary) {
   return `
-    <div class="grid-4 mb-4">
-      <div class="card stat-card">
-        <div class="stat-icon">🌍</div>
-        <div class="stat-value">${formatNumber(g.totalCarbonSaved || 0)}</div>
-        <div class="stat-label">kg CO₂ Saved</div>
+    <section class="section-shell">
+      ${renderSectionIntro(
+        'Platform Impact',
+        'Live sustainability outcomes across the marketplace',
+        'These figures summarize the combined results of listings, exchanges, and participation across the platform.'
+      )}
+      <div class="grid-4">
+        ${renderMetricCard('Carbon Saved', `${formatNumber(data.totalCarbonSaved || 0)} kg`, `${impactSummary.treesEquivalent || '0'} trees equivalent`, 'emerald')}
+        ${renderMetricCard('Waste Reduced', `${formatNumber(data.totalWasteReduced || 0)} kg`, `${impactSummary.carMilesEquivalent || '0'} car miles avoided`, 'gold')}
+        ${renderMetricCard('Total Exchanges', formatNumber(data.totalExchanges || 0), `${formatWholeNumber(data.totalProductsListed || 0)} listings processed`, 'sky')}
+        ${renderMetricCard('Active Users', formatNumber(data.totalUsers || 0), `${formatWholeNumber(data.activeListings || 0)} active listings right now`, 'rose')}
       </div>
-      <div class="card stat-card">
-        <div class="stat-icon">📦</div>
-        <div class="stat-value">${formatNumber(g.totalExchanges || 0)}</div>
-        <div class="stat-label">Products Exchanged</div>
-      </div>
-      <div class="card stat-card">
-        <div class="stat-icon">👥</div>
-        <div class="stat-value">${formatNumber(g.totalUsers || 0)}</div>
-        <div class="stat-label">Active Users</div>
-      </div>
-      <div class="card stat-card">
-        <div class="stat-icon">🗑️</div>
-        <div class="stat-value">${formatNumber(g.totalWasteReduced || 0)}</div>
-        <div class="stat-label">kg Waste Reduced</div>
-      </div>
-    </div>
+    </section>
+  `;
+}
 
-    <div class="grid-2">
-      <div class="card" style="padding:24px">
-        <h3 style="margin-bottom:16px">📈 Category Distribution</h3>
-        ${renderCategoryBars(g.categoryBreakdown || {})}
+function renderPersonalAnalytics(data) {
+  const categoryEntries = Object.entries(data.categoryBreakdown || {}).sort((a, b) => b[1] - a[1]);
+  const monthlyEntries = data.monthlyBreakdown || [];
+  const monthlyMax = Math.max(...monthlyEntries.map((entry) => entry.carbonSaved || 0), 1);
+
+  return `
+    <section class="section-shell">
+      ${renderSectionIntro(
+        'My Impact',
+        'Your measurable contribution to circular commerce',
+        'Personal analytics track carbon savings, activity cadence, and the categories where your exchanges are making the biggest difference.'
+      )}
+      <div class="grid-4">
+        ${renderMetricCard('Carbon Saved', `${formatNumber(data.totalCarbonSaved || 0)} kg`, 'Lifetime circular savings', 'emerald')}
+        ${renderMetricCard('Waste Reduced', `${formatNumber(data.totalWasteReduced || 0)} kg`, 'Estimated from completed exchanges', 'gold')}
+        ${renderMetricCard('Transactions', formatNumber(data.totalTransactions || 0), 'Purchases and sales contributing to impact', 'sky')}
+        ${renderMetricCard('Points Earned', formatNumber(data.totalPointsEarned || 0), `${formatWholeNumber(data.sustainabilityScore || 0)} sustainability score`, 'rose')}
       </div>
-      <div class="card" style="padding:24px">
-        <h3 style="margin-bottom:16px">💰 Market Overview</h3>
-        <div class="sustainability-meter">
-          <div class="meter-row">
-            <span class="meter-label">Total Listings</span>
-            <div style="font-weight:700;color:var(--accent)">${g.totalProductsListed || 0}</div>
-          </div>
-          <div class="meter-row">
-            <span class="meter-label">Waste Reduced</span>
-            <div style="font-weight:700;color:var(--accent)">${(g.totalWasteReduced || 0).toFixed(1)} kg</div>
-          </div>
-          <div class="meter-row">
-            <span class="meter-label">Active Listings</span>
-            <div style="font-weight:700;color:var(--accent)">${g.activeListings || 0}</div>
-          </div>
+    </section>
+
+    <section class="grid-2">
+      <div class="section-shell">
+        ${renderSectionIntro(
+          'Category Mix',
+          'Where your exchanges create the most value',
+          'Higher bars represent categories that have contributed more carbon savings through your activity.'
+        )}
+        <div class="stack-md">
+          ${categoryEntries.length
+            ? categoryEntries.map(([category, value]) => progressBarHTML(category, value, Math.max(categoryEntries[0][1], 1), ' kg')).join('')
+            : '<p class="subtle">Category impact will appear after your first tracked exchange.</p>'}
         </div>
       </div>
-    </div>
-  `;
-}
 
-function renderPersonalAnalytics(p) {
-  return `
-    <div class="grid-3 mb-4">
-      <div class="card stat-card">
-        <div class="stat-icon">🌱</div>
-        <div class="stat-value">${(p.totalCarbonSaved || 0).toFixed(1)}</div>
-        <div class="stat-label">kg CO₂ I've Saved</div>
+      <div class="section-shell">
+        ${renderSectionIntro(
+          'Monthly Trend',
+          'How your sustainability activity is evolving',
+          'Recent months remain visible even when there is little activity, so your progress pattern is easy to read.'
+        )}
+        <div class="stack-md">
+          ${monthlyEntries.map((entry) => progressBarHTML(entry.month, entry.carbonSaved || 0, monthlyMax, ' kg')).join('')}
+        </div>
       </div>
-      <div class="card stat-card">
-        <div class="stat-icon">🛒</div>
-        <div class="stat-value">${p.totalTransactions || 0}</div>
-        <div class="stat-label">Purchases</div>
-      </div>
-      <div class="card stat-card">
-        <div class="stat-icon">💰</div>
-        <div class="stat-value">${p.totalPointsEarned || 0}</div>
-        <div class="stat-label">Points Earned</div>
-      </div>
-    </div>
-    <div class="card" style="padding:24px">
-      <h3 style="margin-bottom:16px">📊 My Sustainability Score</h3>
-      <div class="progress-bar" style="height:12px">
-        <div class="progress-bar-fill" style="width:${Math.min(100, (p.sustainabilityScore || 0))}%"></div>
-      </div>
-      <div class="flex justify-between mt-1">
-        <span class="text-muted" style="font-size:0.8rem">0</span>
-        <span class="text-accent" style="font-weight:700">${p.sustainabilityScore || 0} pts</span>
-        <span class="text-muted" style="font-size:0.8rem">100</span>
-      </div>
-    </div>
+    </section>
   `;
-}
-
-function renderCategoryBars(breakdown) {
-  const entries = Object.entries(breakdown);
-  if (entries.length === 0) return '<p class="text-muted">No data yet</p>';
-  const max = Math.max(...entries.map(([, v]) => v), 1);
-  const icons = { electronics: '💻', furniture: '🪑', clothing: '👕', appliances: '🔌', books: '📚', sports: '⚽', toys: '🧸', automotive: '🚗', other: '📦' };
-  return `<div class="sustainability-meter">
-    ${entries.map(([cat, count]) => `
-      <div class="meter-row">
-        <span class="meter-label">${icons[cat] || '📦'} ${cat}</span>
-        <div class="meter-bar"><div class="meter-fill meter-green" style="width:${(count / max * 100)}%"></div></div>
-        <span style="width:30px;text-align:right;font-size:0.8rem;font-weight:600">${count}</span>
-      </div>
-    `).join('')}
-  </div>`;
 }

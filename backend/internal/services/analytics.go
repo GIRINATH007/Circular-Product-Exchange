@@ -108,11 +108,6 @@ func (as *AnalyticsService) GetGlobalAnalytics() *models.GlobalAnalytics {
 		}
 	}
 
-	// Add baseline platform numbers
-	analytics.TotalCarbonSaved += 12450
-	analytics.TotalWasteReduced += 3820
-	analytics.TotalExchanges += 1847
-
 	analytics.TotalCarbonSaved = float64(int(analytics.TotalCarbonSaved*100)) / 100
 	analytics.TotalWasteReduced = float64(int(analytics.TotalWasteReduced*100)) / 100
 

@@ -4,12 +4,23 @@ import "time"
 
 // LifecycleData contains the environmental impact data for a product.
 type LifecycleData struct {
-	ManufacturingImpact  float64 `json:"manufacturingImpact"`  // CO2 kg from manufacturing
-	UsageMonths          int     `json:"usageMonths"`          // How long it's been used
-	RefurbishmentQuality int     `json:"refurbishmentQuality"` // 1-100 quality score
-	ExpectedReuseCycles  int     `json:"expectedReuseCycles"`  // Remaining reuse potential
-	MaterialRecyclability int    `json:"materialRecyclability"` // 1-100 recyclability
-	CarbonSaved          float64 `json:"carbonSaved"`          // CO2 saved vs buying new
+	ManufacturingImpact   float64 `json:"manufacturingImpact"`   // CO2 kg from manufacturing a new equivalent
+	UsageMonths           int     `json:"usageMonths"`           // How long it's been used
+	RefurbishmentQuality  int     `json:"refurbishmentQuality"`  // 1-100 quality score
+	ExpectedReuseCycles   int     `json:"expectedReuseCycles"`   // Remaining reuse potential
+	MaterialRecyclability int     `json:"materialRecyclability"` // 1-100 recyclability
+	CarbonSaved           float64 `json:"carbonSaved"`           // CO2 saved vs buying new
+	WeightKg              float64 `json:"weightKg"`              // Product weight in kg
+	CarbonSource          string  `json:"carbonSource"`          // Estimation method used
+}
+
+// LifecycleHints are user-friendly inputs used to estimate sustainability values.
+type LifecycleHints struct {
+	UsageMonths    int     `json:"usageMonths"`
+	UsageIntensity string  `json:"usageIntensity"` // "light", "moderate", "heavy"
+	Refurbished    bool    `json:"refurbished"`
+	HasRepairs     bool    `json:"hasRepairs"`
+	WeightKg       float64 `json:"weightKg"` // Product weight in kg
 }
 
 // Product represents a marketplace listing.
@@ -40,7 +51,8 @@ type CreateProductRequest struct {
 	Condition     string        `json:"condition" binding:"required,oneof=like_new good fair poor"`
 	BasePrice     float64       `json:"basePrice" binding:"required,gt=0"`
 	ImageURLs     []string      `json:"imageUrls"`
-	LifecycleData LifecycleData `json:"lifecycleData" binding:"required"`
+	LifecycleData *LifecycleData `json:"lifecycleData,omitempty"`
+	LifecycleHints *LifecycleHints `json:"lifecycleHints,omitempty"`
 }
 
 // UpdateProductRequest allows sellers to update their listing.

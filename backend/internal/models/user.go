@@ -8,7 +8,7 @@ type User struct {
 	UserID              string    `json:"userId"`
 	Email               string    `json:"email"`
 	DisplayName         string    `json:"displayName"`
-	Role                string    `json:"role"` // "buyer", "seller", "recycler"
+	Role                string    `json:"role"` // "buyer", "seller"
 	Bio                 string    `json:"bio"`
 	AvatarURL           string    `json:"avatarUrl"`
 	SustainabilityScore int       `json:"sustainabilityScore"`
@@ -22,7 +22,7 @@ type RegisterRequest struct {
 	Email       string `json:"email" binding:"required,email"`
 	Password    string `json:"password" binding:"required,min=8"`
 	DisplayName string `json:"displayName" binding:"required,min=2"`
-	Role        string `json:"role" binding:"required,oneof=buyer seller recycler"`
+	Role        string `json:"role" binding:"required,oneof=buyer seller"`
 }
 
 // LoginRequest is sent by the client when logging in.

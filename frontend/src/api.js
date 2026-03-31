@@ -1,4 +1,3 @@
-// ─── API Client — Communicates with Go backend ─────────────────────
 const API_BASE = '/api';
 
 class ApiClient {
@@ -18,8 +17,13 @@ class ApiClient {
   }
 
   getUser() {
-    const data = localStorage.getItem('ce_user');
-    return data ? JSON.parse(data) : null;
+    try {
+      const data = localStorage.getItem('ce_user');
+      return data ? JSON.parse(data) : null;
+    } catch {
+      localStorage.removeItem('ce_user');
+      return null;
+    }
   }
 
   setUser(user) {
@@ -27,26 +31,36 @@ class ApiClient {
   }
 
   isLoggedIn() {
-    return !!this.token;
+    return Boolean(this.token);
   }
 
   async request(method, path, body = null) {
     const headers = { 'Content-Type': 'application/json' };
-    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
 
-    const opts = { method, headers };
-    if (body) opts.body = JSON.stringify(body);
+    const options = { method, headers };
+    if (body) options.body = JSON.stringify(body);
 
-    const res = await fetch(`${API_BASE}${path}`, opts);
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error || `Request failed (${res.status})`);
+    let response;
+    try {
+      response = await fetch(`${API_BASE}${path}`, options);
+    } catch {
+      throw new Error('Unable to reach the server. Check that the backend is running.');
     }
+
+    const isJSON = response.headers.get('content-type')?.includes('application/json');
+    const data = response.status === 204 ? null : (isJSON ? await response.json() : null);
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        this.clearToken();
+      }
+      throw new Error(data?.error || `Request failed (${response.status})`);
+    }
+
     return data;
   }
 
-  // Auth
   async register(email, password, displayName, role) {
     const data = await this.request('POST', '/auth/register', { email, password, displayName, role });
     this.setToken(data.token);
@@ -73,10 +87,9 @@ class ApiClient {
     return this.request('PUT', '/auth/profile', updates);
   }
 
-  // Products
   async listProducts(params = {}) {
     const query = new URLSearchParams(params).toString();
-    return this.request('GET', `/products${query ? '?' + query : ''}`);
+    return this.request('GET', `/products${query ? `?${query}` : ''}`);
   }
 
   async getProduct(id) {
@@ -103,7 +116,10 @@ class ApiClient {
     return this.request('GET', '/products/categories');
   }
 
-  // Analytics
+  async myListings() {
+    return this.request('GET', '/products/my-listings');
+  }
+
   async getGlobalAnalytics() {
     return this.request('GET', '/analytics/global');
   }
@@ -112,7 +128,6 @@ class ApiClient {
     return this.request('GET', '/analytics/personal');
   }
 
-  // Gamification
   async getBadges() {
     return this.request('GET', '/gamification/badges');
   }

@@ -48,6 +48,7 @@ func SetupRoutes(router *gin.Engine, cfg *config.Config, db *services.AppwriteSe
 		{
 			products.GET("", productHandler.ListProducts)
 			products.GET("/categories", productHandler.GetCategories)
+			products.GET("/my-listings", authMW, productHandler.MyListings)
 			products.GET("/:id", productHandler.GetProduct)
 			products.POST("", authMW, productHandler.CreateProduct)
 			products.PUT("/:id", authMW, productHandler.UpdateProduct)
