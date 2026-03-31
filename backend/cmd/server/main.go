@@ -21,11 +21,15 @@ func main() {
 	db := services.NewAppwriteService(cfg)
 	log.Println("Database service initialized")
 
+	// Connect to MongoDB for feedback feature
+	mongoClient := services.ConnectMongo(cfg.MongoURI)
+	log.Println("MongoDB connected")
+
 	router := gin.Default()
 	router.Use(middleware.SetupCORS())
 	log.Println("CORS middleware configured")
 
-	routes.SetupRoutes(router, cfg, db)
+	routes.SetupRoutes(router, cfg, db, mongoClient)
 	log.Println("API routes registered")
 
 	addr := fmt.Sprintf(":%s", cfg.Port)

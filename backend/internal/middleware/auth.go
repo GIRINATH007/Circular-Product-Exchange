@@ -108,3 +108,12 @@ func GetUserIDFromContext(c *gin.Context) (string, bool) {
 	}
 	return userID.(string), true
 }
+
+// GetEmailFromContext extracts the email set by auth middleware.
+func GetEmailFromContext(c *gin.Context) (string, bool) {
+	email, exists := c.Get("email")
+	if !exists {
+		return "", false
+	}
+	return email.(string), true
+}

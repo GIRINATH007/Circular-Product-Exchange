@@ -3,6 +3,7 @@ import { router } from '../router.js';
 import {
   attachProductCardHandlers,
   emptyHTML,
+  formatDate,
   formatNumber,
   productCardHTML,
   progressBarHTML,
@@ -59,20 +60,26 @@ export async function renderDashboardPage() {
         )}
         <div id="archived-listings-grid" class="grid-3"></div>
       </section>
+
+      <section class="section-shell">
+        <div id="feedback-history-panel"></div>
+      </section>
     </div>
   `;
 
   try {
-    const [profile, progress, personalAnalytics, myListingsResponse] = await Promise.all([
+    const [profile, progress, personalAnalytics, myListingsResponse, myFeedbackResponse] = await Promise.all([
       api.getProfile(),
       api.getMyProgress().catch(() => null),
       api.getPersonalAnalytics().catch(() => null),
       api.myListings().catch(() => ({ products: [] })),
+      api.getMyFeedback().catch(() => ({ feedback: [] })),
     ]);
 
     const personal = personalAnalytics?.analytics || personalAnalytics || {};
     const badges = progress?.earnedBadges || [];
     const allMyProducts = myListingsResponse.products || [];
+    const myFeedback = myFeedbackResponse?.feedback || [];
     const myProducts = allMyProducts.filter((p) => p.status === 'active' || p.status === 'sold');
     const archivedProducts = allMyProducts.filter((p) => p.status === 'archived');
     const initials = (profile.displayName || 'Circular User')
@@ -175,6 +182,36 @@ export async function renderDashboardPage() {
       `).join('');
       attachProductCardHandlers((productId) => router.navigate(`/product/${productId}`));
     }
+
+    document.getElementById('feedback-history-panel').innerHTML = `
+      ${renderSectionIntro(
+        'Your Feedback',
+        myFeedback.length ? 'A record of the feedback you submitted while signed in' : 'No feedback submitted yet',
+        myFeedback.length
+          ? 'Use this history to avoid reporting the same issue twice and to keep track of ideas you have already shared.'
+          : 'The homepage form is ready whenever you want to suggest an improvement or report a problem.',
+        '<a href="/#feedback-section" data-link class="btn btn-secondary">Open Feedback Form</a>'
+      )}
+      <div class="stack-md">
+        ${myFeedback.length
+          ? myFeedback.map((entry) => `
+            <article class="panel-card">
+              <div class="stack-md">
+                <div class="feedback-entry-meta">
+                  <span class="pill pill-emerald">${formatDate(entry.createdAt)}</span>
+                  <span class="pill pill-muted">${entry.email}</span>
+                </div>
+                <h3>${entry.name}</h3>
+                <p>${entry.message}</p>
+              </div>
+            </article>
+          `).join('')
+          : emptyHTML(
+            'No feedback history yet',
+            'Once you send feedback while logged in, it will show up here.'
+          )}
+      </div>
+    `;
   } catch (error) {
     showToast(error.message || 'Dashboard failed to load.', 'error');
     app.innerHTML = `<div class="container page">${emptyHTML('Dashboard unavailable', error.message || 'Please try again shortly.')}</div>`;

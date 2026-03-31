@@ -121,8 +121,42 @@ export async function renderHomePage() {
         )}
         <div class="grid-3" id="home-categories">${loadingHTML('Loading active categories')}</div>
       </section>
+
+      <section class="section-shell" id="feedback-section">
+        ${renderSectionIntro(
+          'Share Your Feedback',
+          'Help us improve the CircularX experience',
+          'We value your thoughts. Let us know how we can make circular commerce even better for everyone.'
+        )}
+        <form id="feedback-form" class="feedback-form">
+          <div class="form-grid feedback-grid">
+            <div class="input-group">
+              <label for="feedback-name">Name</label>
+              <input type="text" id="feedback-name" class="input" placeholder="Your name" required />
+            </div>
+            <div class="input-group">
+              <label for="feedback-email">Email</label>
+              <input type="email" id="feedback-email" class="input" placeholder="you@example.com" required />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="feedback-message">Message</label>
+            <textarea id="feedback-message" class="input" placeholder="Tell us what you think..." rows="4" required></textarea>
+          </div>
+          <div class="feedback-actions">
+            <button type="submit" class="btn btn-primary" id="feedback-submit">Send Feedback</button>
+          </div>
+          <div id="feedback-status" class="feedback-status hidden"></div>
+        </form>
+      </section>
     </div>
   `;
+
+  if (window.location.hash === '#feedback-section') {
+    requestAnimationFrame(() => {
+      document.getElementById('feedback-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
 
   try {
     const response = await api.getGlobalAnalytics();
@@ -166,6 +200,40 @@ export async function renderHomePage() {
       error.message || 'Category data could not be loaded.'
     );
   }
+
+  // ── Feedback form handler ──────────────────────────────────────────
+  const feedbackForm = document.getElementById('feedback-form');
+  feedbackForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const submitBtn = document.getElementById('feedback-submit');
+    const statusEl = document.getElementById('feedback-status');
+    const name = document.getElementById('feedback-name').value.trim();
+    const email = document.getElementById('feedback-email').value.trim();
+    const message = document.getElementById('feedback-message').value.trim();
+
+    if (!name || !email || !message) {
+      statusEl.className = 'feedback-status feedback-error';
+      statusEl.textContent = 'Please fill in all fields.';
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Sending...';
+    statusEl.className = 'feedback-status hidden';
+
+    try {
+      await api.submitFeedback(name, email, message);
+      feedbackForm.reset();
+      statusEl.className = 'feedback-status feedback-success';
+      statusEl.innerHTML = '<strong>✓ Thank you!</strong> Your feedback has been submitted successfully.';
+    } catch (err) {
+      statusEl.className = 'feedback-status feedback-error';
+      statusEl.textContent = err.message || 'Something went wrong. Please try again.';
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Send Feedback';
+    }
+  });
 }
 
 function featureCard(title, copy) {

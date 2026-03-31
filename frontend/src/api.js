@@ -139,6 +139,14 @@ class ApiClient {
   async getMyProgress() {
     return this.request('GET', '/gamification/my-progress');
   }
+
+  async submitFeedback(name, email, message) {
+    return this.request('POST', '/feedback', { name, email, message });
+  }
+
+  async getMyFeedback() {
+    return this.request('GET', '/feedback/mine');
+  }
 }
 
 export const api = new ApiClient();

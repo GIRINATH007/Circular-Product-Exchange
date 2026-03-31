@@ -21,6 +21,10 @@ type Config struct {
 
 	JWTSecret string
 	Port      string
+
+	// MongoDB
+	MongoURI    string
+	MongoDBName string
 }
 
 // IsAppwriteConfigured returns true if Appwrite credentials are set.
@@ -45,6 +49,8 @@ func LoadConfig() *Config {
 		TransactionsCollectionID: getEnv("APPWRITE_TRANSACTIONS_COLLECTION_ID", "transactions"),
 		JWTSecret:                getEnv("JWT_SECRET", "default-secret-change-me"),
 		Port:                     getEnv("PORT", "8080"),
+		MongoURI:                 getEnv("MONGODB_URI", "mongodb://localhost:27017"),
+		MongoDBName:              getEnv("MONGO_DB_NAME", "circular_exchange"),
 	}
 
 	if !cfg.IsAppwriteConfigured() {

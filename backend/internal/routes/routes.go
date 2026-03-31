@@ -7,10 +7,11 @@ import (
 	"circular-exchange/internal/services"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 // SetupRoutes configures all API routes.
-func SetupRoutes(router *gin.Engine, cfg *config.Config, db *services.AppwriteService) {
+func SetupRoutes(router *gin.Engine, cfg *config.Config, db *services.AppwriteService, mongoClient *mongo.Client) {
 	// Initialize services
 	pricingEngine := services.NewPricingEngine(db)
 	gamificationService := services.NewGamificationService(db)
@@ -21,8 +22,11 @@ func SetupRoutes(router *gin.Engine, cfg *config.Config, db *services.AppwriteSe
 	productHandler := handlers.NewProductHandler(db, pricingEngine, gamificationService)
 	analyticsHandler := handlers.NewAnalyticsHandler(analyticsService)
 	gamificationHandler := handlers.NewGamificationHandler(gamificationService)
+	feedbackStore := services.NewMongoFeedbackStore(mongoClient.Database(cfg.MongoDBName))
+	feedbackHandler := handlers.NewFeedbackHandler(feedbackStore)
 
 	authMW := middleware.AuthMiddleware(cfg.JWTSecret)
+	optionalAuthMW := middleware.OptionalAuthMiddleware(cfg.JWTSecret)
 
 	// Recalculate all product prices on startup
 	pricingEngine.RecalculateAllPrices()
@@ -69,6 +73,13 @@ func SetupRoutes(router *gin.Engine, cfg *config.Config, db *services.AppwriteSe
 			gamification.GET("/badges", gamificationHandler.GetBadges)
 			gamification.GET("/leaderboard", gamificationHandler.GetLeaderboard)
 			gamification.GET("/my-progress", authMW, gamificationHandler.GetMyProgress)
+		}
+
+		// Feedback route (no auth required — any visitor can submit)
+		feedback := api.Group("/feedback")
+		{
+			feedback.POST("", optionalAuthMW, feedbackHandler.SubmitFeedback)
+			feedback.GET("/mine", authMW, feedbackHandler.GetMyFeedback)
 		}
 	}
 }

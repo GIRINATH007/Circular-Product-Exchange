@@ -1450,3 +1450,50 @@ textarea.input {
   border-color: rgba(255, 255, 255, 0.22);
   box-shadow: 0 8px 24px rgba(0,0,0,0.2);
 }
+
+/* ── Feedback form ────────────────────────────────────────── */
+.feedback-form {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.feedback-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.feedback-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.feedback-status {
+  padding: 1rem 1.2rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.94rem;
+  animation: toast-in 200ms ease;
+}
+
+.feedback-entry-meta {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.feedback-success {
+  background: rgba(34, 160, 121, 0.12);
+  border: 1px solid rgba(34, 160, 121, 0.3);
+  color: #34d399;
+}
+
+.feedback-error {
+  background: rgba(185, 66, 87, 0.12);
+  border: 1px solid rgba(185, 66, 87, 0.3);
+  color: #f87171;
+}
+
+@media (max-width: 760px) {
+  .feedback-grid {
+    grid-template-columns: 1fr;
+  }
+}
