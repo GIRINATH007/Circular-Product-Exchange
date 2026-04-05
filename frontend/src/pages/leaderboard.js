@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { emptyHTML, formatWholeNumber, renderSectionIntro } from '../utils.js';
+import { emptyHTML, formatWholeNumber, loadingHTML, renderSectionIntro } from '../utils.js';
 
 export async function renderLeaderboardPage() {
   const app = document.getElementById('page-content');
@@ -17,7 +17,7 @@ export async function renderLeaderboardPage() {
         </div>
       </section>
 
-      <section id="community-content" class="stack-lg"></section>
+      <section id="community-content" class="stack-lg">${loadingHTML('Loading community data')}</section>
     </div>
   `;
 

@@ -3,6 +3,7 @@ import {
   emptyHTML,
   formatNumber,
   formatWholeNumber,
+  loadingHTML,
   progressBarHTML,
   renderMetricCard,
   renderSectionIntro,
@@ -21,7 +22,7 @@ export async function renderAnalyticsPage() {
         <div class="tabs" id="analytics-tabs"></div>
       </section>
 
-      <section id="analytics-content" class="analytics-layout"></section>
+      <section id="analytics-content" class="analytics-layout">${loadingHTML('Loading impact analytics')}</section>
     </div>
   `;
 
