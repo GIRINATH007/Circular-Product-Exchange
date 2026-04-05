@@ -10,20 +10,21 @@ import (
 )
 
 // ConnectMongo establishes a connection to MongoDB and returns the client.
-func ConnectMongo(uri string) *mongo.Client {
+func ConnectMongo(uri string) (*mongo.Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	client, err := mongo.Connect(options.Client().ApplyURI(uri))
 	if err != nil {
-		log.Fatalf("Failed to connect to MongoDB: %v", err)
+		return nil, err
 	}
 
 	// Ping to verify connection
 	if err := client.Ping(ctx, nil); err != nil {
-		log.Fatalf("Failed to ping MongoDB: %v", err)
+		_ = client.Disconnect(context.Background())
+		return nil, err
 	}
 
-	log.Println("✅ Connected to MongoDB")
-	return client
+	log.Println("Connected to MongoDB for feedback storage")
+	return client, nil
 }

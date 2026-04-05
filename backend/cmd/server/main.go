@@ -22,8 +22,13 @@ func main() {
 	log.Println("Database service initialized")
 
 	// Connect to MongoDB for feedback feature
-	mongoClient := services.ConnectMongo(cfg.MongoURI)
-	log.Println("MongoDB connected")
+	mongoClient, err := services.ConnectMongo(cfg.MongoURI)
+	if err != nil {
+		log.Printf("MongoDB unavailable for feedback service: %v", err)
+		log.Println("Continuing startup with Appwrite-backed core APIs")
+	} else {
+		log.Println("MongoDB connected for feedback service")
+	}
 
 	router := gin.Default()
 	router.Use(middleware.SetupCORS())

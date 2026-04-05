@@ -41,7 +41,10 @@ func (s *MongoFeedbackStore) ListFeedbackByUser(ctx context.Context, userID stri
 	cursor, err := s.collection.Find(
 		ctx,
 		bson.M{"user_id": userID},
-		options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}}).SetLimit(limit),
+		options.Find().
+			SetSort(bson.D{{Key: "created_at", Value: -1}}).
+			SetLimit(limit).
+			SetProjection(bson.M{"_id": 0}),
 	)
 	if err != nil {
 		return nil, err

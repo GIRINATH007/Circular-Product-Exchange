@@ -22,8 +22,12 @@ func SetupRoutes(router *gin.Engine, cfg *config.Config, db *services.AppwriteSe
 	productHandler := handlers.NewProductHandler(db, pricingEngine, gamificationService)
 	analyticsHandler := handlers.NewAnalyticsHandler(analyticsService)
 	gamificationHandler := handlers.NewGamificationHandler(gamificationService)
-	feedbackStore := services.NewMongoFeedbackStore(mongoClient.Database(cfg.MongoDBName))
-	feedbackHandler := handlers.NewFeedbackHandler(feedbackStore)
+
+	var feedbackHandler *handlers.FeedbackHandler
+	if mongoClient != nil {
+		feedbackStore := services.NewMongoFeedbackStore(mongoClient.Database(cfg.MongoDBName))
+		feedbackHandler = handlers.NewFeedbackHandler(feedbackStore)
+	}
 
 	authMW := middleware.AuthMiddleware(cfg.JWTSecret)
 	optionalAuthMW := middleware.OptionalAuthMiddleware(cfg.JWTSecret)
@@ -75,11 +79,20 @@ func SetupRoutes(router *gin.Engine, cfg *config.Config, db *services.AppwriteSe
 			gamification.GET("/my-progress", authMW, gamificationHandler.GetMyProgress)
 		}
 
-		// Feedback route (no auth required — any visitor can submit)
+		// Feedback routes use MongoDB only.
 		feedback := api.Group("/feedback")
 		{
-			feedback.POST("", optionalAuthMW, feedbackHandler.SubmitFeedback)
-			feedback.GET("/mine", authMW, feedbackHandler.GetMyFeedback)
+			if feedbackHandler != nil {
+				feedback.POST("", optionalAuthMW, feedbackHandler.SubmitFeedback)
+				feedback.GET("/mine", authMW, feedbackHandler.GetMyFeedback)
+			} else {
+				feedback.POST("", func(c *gin.Context) {
+					c.JSON(503, gin.H{"error": "Feedback service unavailable"})
+				})
+				feedback.GET("/mine", func(c *gin.Context) {
+					c.JSON(503, gin.H{"error": "Feedback service unavailable"})
+				})
+			}
 		}
 	}
 }
