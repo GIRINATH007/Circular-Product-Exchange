@@ -76,6 +76,11 @@ export async function renderDashboardPage() {
       api.getMyFeedback().catch(() => ({ feedback: [] })),
     ]);
 
+    // If the user navigated away while requests were in flight, stop safely.
+    if (!app.isConnected || !document.getElementById('dashboard-name')) {
+      return;
+    }
+
     const personal = personalAnalytics?.analytics || personalAnalytics || {};
     const badges = progress?.earnedBadges || [];
     const allMyProducts = myListingsResponse.products || [];
@@ -213,6 +218,7 @@ export async function renderDashboardPage() {
       </div>
     `;
   } catch (error) {
+    if (!app.isConnected) return;
     showToast(error.message || 'Dashboard failed to load.', 'error');
     app.innerHTML = `<div class="container page">${emptyHTML('Dashboard unavailable', error.message || 'Please try again shortly.')}</div>`;
   }
