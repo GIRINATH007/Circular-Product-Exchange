@@ -5,6 +5,7 @@ import {
   emptyHTML,
   formatDate,
   formatNumber,
+  loadingHTML,
   productCardHTML,
   progressBarHTML,
   renderMetricCard,
@@ -39,7 +40,7 @@ export async function renderDashboardPage() {
           'Your circular exchange performance at a glance',
           'This dashboard combines profile, gamification, and listing data to show how your activity translates into impact.'
         )}
-        <div class="grid-4" id="dashboard-metrics"></div>
+        <div class="grid-4" id="dashboard-metrics">${loadingHTML('Loading dashboard')}</div>
       </section>
 
       <section class="grid-2">
