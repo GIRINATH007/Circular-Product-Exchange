@@ -193,7 +193,7 @@ export function renderCreateListingPage() {
         },
       };
 
-      if (payload.title.length < 3 || payload.description.length < 10 || !payload.basePrice) {
+      if (!payload.title || !payload.description || !Number.isFinite(payload.basePrice) || payload.basePrice <= 0) {
         throw new Error('Please complete the listing title, description, and price before submitting.');
       }
 

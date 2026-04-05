@@ -20,7 +20,7 @@ export async function renderHomePage() {
             <span class="section-eyebrow">Circular Commerce Platform</span>
             <h1>Refurbished products priced by lifecycle value, not guesswork.</h1>
             <p>
-              CircularX helps buyers, sellers, and recyclers exchange products with transparent
+              Eco Loop helps buyers, sellers, and recyclers exchange products with transparent
               sustainability metrics, adaptive pricing, and measurable environmental impact.
             </p>
             <div class="hero-actions">
@@ -125,7 +125,7 @@ export async function renderHomePage() {
       <section class="section-shell" id="feedback-section">
         ${renderSectionIntro(
           'Share Your Feedback',
-          'Help us improve the CircularX experience',
+          'Help us improve the Eco Loop experience',
           'We value your thoughts. Let us know how we can make circular commerce even better for everyone.'
         )}
         <form id="feedback-form" class="feedback-form">

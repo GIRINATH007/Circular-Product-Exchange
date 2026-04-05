@@ -104,9 +104,6 @@ export async function renderProductDetailPage(productId) {
                 ${!api.isLoggedIn()
                   ? '<a href="/login" data-link class="btn btn-primary btn-full">Sign in to purchase</a>'
                   : ''}
-                ${isOwner
-                  ? '<button id="btn-delete" class="btn btn-danger btn-full" type="button">Archive Listing</button>'
-                  : ''}
               </div>
             </div>
           </aside>
@@ -132,23 +129,6 @@ export async function renderProductDetailPage(productId) {
       });
     }
 
-    const deleteButton = document.getElementById('btn-delete');
-    if (deleteButton) {
-      deleteButton.addEventListener('click', async () => {
-        deleteButton.disabled = true;
-        deleteButton.textContent = 'Archiving listing';
-
-        try {
-          await api.deleteProduct(productId);
-          showToast('Listing archived successfully.', 'success');
-          router.navigate('/dashboard');
-        } catch (error) {
-          deleteButton.disabled = false;
-          deleteButton.textContent = 'Archive Listing';
-          showToast(error.message || 'Unable to archive listing.', 'error');
-        }
-      });
-    }
   } catch (error) {
     app.innerHTML = `<div class="container page">${emptyHTML('Product unavailable', error.message || 'We could not load this listing.')}</div>`;
   }

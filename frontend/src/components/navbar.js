@@ -15,10 +15,10 @@ export function renderNavbar() {
     <header class="topbar">
       <div class="container">
         <div class="topbar-shell">
-          <a href="/" data-link class="brand" aria-label="CircularX home">
-            <span class="brand-mark">CX</span>
+          <a href="/" data-link class="brand" aria-label="Eco Loop home">
+            <span class="brand-mark">EL</span>
             <span class="brand-copy">
-              <strong>CircularX</strong>
+              <strong>Eco Loop</strong>
               <span>Lifecycle-led exchange marketplace</span>
             </span>
           </a>

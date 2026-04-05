@@ -3,7 +3,6 @@ import { router } from '../router.js';
 import {
   attachProductCardHandlers,
   emptyHTML,
-  formatDate,
   formatNumber,
   loadingHTML,
   productCardHTML,
@@ -52,29 +51,15 @@ export async function renderDashboardPage() {
         <div id="listings-intro"></div>
         <div id="my-listings-grid" class="grid-3"></div>
       </section>
-
-      <section class="section-shell" id="archived-section" style="display:none">
-        ${renderSectionIntro(
-          'Archived Listings',
-          'Products you have removed from the marketplace',
-          'These listings are no longer visible to buyers but remain in your history.'
-        )}
-        <div id="archived-listings-grid" class="grid-3"></div>
-      </section>
-
-      <section class="section-shell">
-        <div id="feedback-history-panel"></div>
-      </section>
     </div>
   `;
 
   try {
-    const [profile, progress, personalAnalytics, myListingsResponse, myFeedbackResponse] = await Promise.all([
+    const [profile, progress, personalAnalytics, myListingsResponse] = await Promise.all([
       api.getProfile(),
       api.getMyProgress().catch(() => null),
       api.getPersonalAnalytics().catch(() => null),
       api.myListings().catch(() => ({ products: [] })),
-      api.getMyFeedback().catch(() => ({ feedback: [] })),
     ]);
 
     // If the user navigated away while requests were in flight, stop safely.
@@ -85,9 +70,7 @@ export async function renderDashboardPage() {
     const personal = personalAnalytics?.analytics || personalAnalytics || {};
     const badges = progress?.earnedBadges || [];
     const allMyProducts = myListingsResponse.products || [];
-    const myFeedback = myFeedbackResponse?.feedback || [];
     const myProducts = allMyProducts.filter((p) => p.status === 'active' || p.status === 'sold');
-    const archivedProducts = allMyProducts.filter((p) => p.status === 'archived');
     const initials = (profile.displayName || 'Circular User')
       .split(' ')
       .map((part) => part[0])
@@ -174,50 +157,6 @@ export async function renderDashboardPage() {
         profile.role === 'seller' ? '<a href="/create-listing" data-link class="btn btn-primary">Create Listing</a>' : '<a href="/marketplace" data-link class="btn btn-primary">Browse Marketplace</a>'
       );
     }
-
-    if (archivedProducts.length) {
-      document.getElementById('archived-section').style.display = '';
-      const archivedContainer = document.getElementById('archived-listings-grid');
-      archivedContainer.innerHTML = archivedProducts.map((product) => `
-        <div class="archived-listing">
-          <div class="archived-listing-card">
-            ${productCardHTML(product)}
-            <span class="pill pill-rose archived-badge">Archived</span>
-          </div>
-        </div>
-      `).join('');
-      attachProductCardHandlers((productId) => router.navigate(`/product/${productId}`));
-    }
-
-    document.getElementById('feedback-history-panel').innerHTML = `
-      ${renderSectionIntro(
-        'Your Feedback',
-        myFeedback.length ? 'A record of the feedback you submitted while signed in' : 'No feedback submitted yet',
-        myFeedback.length
-          ? 'Use this history to avoid reporting the same issue twice and to keep track of ideas you have already shared.'
-          : 'The homepage form is ready whenever you want to suggest an improvement or report a problem.',
-        '<a href="/#feedback-section" data-link class="btn btn-secondary">Open Feedback Form</a>'
-      )}
-      <div class="stack-md">
-        ${myFeedback.length
-          ? myFeedback.map((entry) => `
-            <article class="panel-card">
-              <div class="stack-md">
-                <div class="feedback-entry-meta">
-                  <span class="pill pill-emerald">${formatDate(entry.createdAt)}</span>
-                  <span class="pill pill-muted">${entry.email}</span>
-                </div>
-                <h3>${entry.name}</h3>
-                <p>${entry.message}</p>
-              </div>
-            </article>
-          `).join('')
-          : emptyHTML(
-            'No feedback history yet',
-            'Once you send feedback while logged in, it will show up here.'
-          )}
-      </div>
-    `;
   } catch (error) {
     if (!app.isConnected) return;
     showToast(error.message || 'Dashboard failed to load.', 'error');

@@ -6,10 +6,10 @@ export function renderFooter() {
       <div class="container">
         <div class="footer-grid">
           <div class="footer-brand">
-            <a href="/" data-link class="brand" aria-label="CircularX home">
-              <span class="brand-mark">CX</span>
+            <a href="/" data-link class="brand" aria-label="Eco Loop home">
+              <span class="brand-mark">EL</span>
               <span class="brand-copy">
-                <strong>CircularX</strong>
+                <strong>Eco Loop</strong>
                 <span>Lifecycle-led exchange marketplace</span>
               </span>
             </a>
@@ -45,7 +45,7 @@ export function renderFooter() {
         </div>
 
         <div class="footer-bottom">
-          <p>&copy; ${year} CircularX. All rights reserved.</p>
+          <p>&copy; ${year} Eco Loop. All rights reserved.</p>
           <p>Built with sustainable design principles in mind. 🌱</p>
         </div>
       </div>
